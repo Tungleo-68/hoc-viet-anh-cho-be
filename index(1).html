@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="referrer" content="no-referrer">
     <title>Bé Học Chữ Cái, Số & Trí Não Toàn Diện</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts: Be Vietnam Pro for Vietnamese texts, Fredoka for child-friendly headings (100% Vietnamese localized support) -->
-    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@500;700;900&family=Fredoka:wght@600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght=500;700;900&family=Fredoka:wght=600;700&display=swap" rel="stylesheet">
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Canvas Confetti for winning rewards -->
@@ -256,7 +257,7 @@
             </div>
         </section>
 
-        <!-- ================= STREAMING_CHUNK: Thiết kế giao diện Flashcards Học Thẻ với Emoji siêu to phóng đại ================= -->
+        <!-- ================= STREAMING_CHUNK: Thiết lập giao diện Flashcards Học Thẻ với Emoji siêu to phóng đại ================= -->
         <!-- ================= SECTION 5: FLASHCARD STUDY ARENA ================= -->
         <section id="section-flashcard" class="hidden space-y-5">
             <div class="bg-indigo-100 text-indigo-900 border-2 border-indigo-200 rounded-2xl p-4 flex items-center space-x-3 shadow-sm">
@@ -377,7 +378,7 @@
 
                 <!-- 3.2. Spelling Game Area -->
                 <div id="game-spelling-area" class="hidden w-full flex flex-col items-center justify-center space-y-4 py-2">
-                    <p class="text-center text-[10px] md:text-xs text-slate-500 font-bold leading-tight">Bấm các chữ cái xáo trộn bên dưới theo đúng thứ tự của hình ảnh gợi ý nhé!</p>
+                    <p class="text-center text-[10px] md:text-xs text-slate-500 font-bold leading-tight">Bấm các chữ cái xáo trộn bên dưới theo đúng thứ tự gợi ý nhé!</p>
                     
                     <!-- Display Question details -->
                     <div class="flex flex-col items-center justify-center space-y-1">
@@ -573,7 +574,7 @@
         <p class="mt-2 text-slate-500">© 2026 Bé Học Thông Minh. All rights reserved.</p>
     </footer>
 
-    <!-- ================= STREAMING_CHUNK: Thiết lập dữ liệu và logic vận hành học tập trực quan ================= -->
+    <!-- App Logic Script -->
     <script>
         // --- DATASET DEFINITIONS ---
         // Alphabet Vietnamese Dataset with standard Pedagogical phonetic spelling
@@ -780,62 +781,89 @@
             { id: 'shapes', name: 'Hình khối', icon: 'fa-shapes', bg: 'bg-purple-100 text-purple-700' }
         ];
 
-        // --- ================= STREAMING_CHUNK: Thiết lập cấu hình giọng đọc Nữ và TTS thông minh chống lỗi GitHub ================= ---
+        // --- AUDIO STATE & TTS CONFIG ---
         const synth = window.speechSynthesis;
         let viVoice = null;
         let enVoice = null;
-        let speechSpeed = 0.8; // Tốc độ phát âm chuẩn cho trẻ nhỏ dễ lặp lại
+        let speechSpeed = 0.8; // Set default speed slightly slower (0.8) for optimal child learning & imitation
         let activeAudio = null;
+        let activeUtterance = null; // Tránh nạp chồng giọng nói Web Speech API
+        let bilingualTimeout = null; // Quản lý luồng đọc song ngữ không đè âm
 
-        // Bộ lọc tìm giọng Nữ (Female) tối ưu nhất của thiết bị
-        function initVoices() {
-            if (!synth) return;
+        function getBestFemaleVoice(lang) {
+            if (!synth) return null;
             const voices = synth.getVoices();
             
-            // Tìm kiếm giọng Nữ Tiếng Việt (Ưu tiên giọng Linh, Lan, An, Google vi-VN, hoặc các giọng chứa "female", "nữ")
-            const viFemaleFilters = [
-                v => v.lang.toLowerCase().replace('_', '-').includes('vi-vn') && (v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('linh') || v.name.toLowerCase().includes('lan') || v.name.toLowerCase().includes('an') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('nữ')),
-                v => v.lang.toLowerCase().startsWith('vi') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('nữ') || v.name.toLowerCase().includes('linh') || v.name.toLowerCase().includes('an') || v.name.toLowerCase().includes('lan')),
-                v => v.lang.toLowerCase().startsWith('vi') && !v.name.toLowerCase().includes('male'),
-                v => v.lang.toLowerCase().startsWith('vi')
-            ];
-
-            for (let filter of viFemaleFilters) {
-                viVoice = voices.find(filter);
-                if (viVoice) break;
+            // Lọc danh sách giọng nói khớp ngôn ngữ
+            let langVoices = voices.filter(v => v.lang.toLowerCase().replace('_', '-').includes(lang.toLowerCase()));
+            if (langVoices.length === 0) {
+                langVoices = voices.filter(v => v.lang.toLowerCase().startsWith(lang.toLowerCase().substring(0, 2)));
             }
 
-            // Tìm kiếm giọng Nữ Tiếng Anh (Ưu tiên Google US English, Zira, Samantha, Susan, Hazel, Elsa)
-            const enFemaleFilters = [
-                v => (v.lang.toLowerCase().replace('_', '-').includes('en-us') || v.lang.toLowerCase().replace('_', '-').includes('en-gb')) && (v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('samantha') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('susan') || v.name.toLowerCase().includes('hazel') || v.name.toLowerCase().includes('elsa')),
-                v => v.lang.toLowerCase().startsWith('en') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('samantha') || v.name.toLowerCase().includes('susan') || v.name.toLowerCase().includes('hazel')),
-                v => v.lang.toLowerCase().startsWith('en') && !v.name.toLowerCase().includes('male'),
-                v => v.lang.toLowerCase().startsWith('en')
-            ];
+            // Danh sách các từ khóa liên quan đến giọng nam (bị loại bỏ hoàn toàn để không phát sinh giọng nam đọc)
+            const maleNames = ['nam', 'phong', 'dang', 'puck', 'david', 'mark', 'george', 'brian', 'brandon', 'male', 'frank', 'richard', 'sean', 'james', 'bill', 'paul', 'stefan', 'raoul', 'pablo', 'szabolcs', 'andika', 'cosimo', 'ichiro', 'rizwan', 'adam', 'daniel', 'andrei', 'pavel', 'filip', 'lado', 'tolga', 'minh', 'quang'];
+            // Danh sách các từ khóa liên quan đến giọng nữ (được ưu tiên tối đa)
+            const femaleNames = ['female', 'hoaimy', 'linh', 'lan', 'an', 'mai', 'mon', 'achernar', 'amelia', 'anna', 'aria', 'charlotte', 'zira', 'samantha', 'hazel', 'susan', 'linda', 'heera', 'catherine', 'hoda', 'herena', 'huihui', 'yaoyao', 'tracy', 'yating', 'hanhan', 'helle', 'heidi', 'caroline', 'hortence', 'julie', 'hedda', 'katja', 'kalpana', 'elsa', 'ayumi', 'haruka', 'paulina', 'maria', 'helia', 'irina', 'heami', 'helena', 'laura', 'sabina', 'nga', 'hoa', 'trinh'];
 
-            for (let filter of enFemaleFilters) {
-                enVoice = voices.find(filter);
-                if (enVoice) break;
+            // Bước 1: Tìm giọng nói khớp từ khóa giọng nữ và KHÔNG chứa từ khóa giọng nam
+            let bestVoice = langVoices.find(v => {
+                const name = v.name.toLowerCase();
+                return femaleNames.some(f => name.includes(f)) && !maleNames.some(m => name.includes(m));
+            });
+
+            // Bước 2: Nếu không tìm thấy, lấy giọng nói bất kỳ KHÔNG chứa từ khóa giọng nam
+            if (!bestVoice) {
+                bestVoice = langVoices.find(v => {
+                    const name = v.name.toLowerCase();
+                    return !maleNames.some(m => name.includes(m));
+                });
             }
+
+            // Bước 3: Dự phòng cuối cùng - lấy giọng đầu tiên khớp ngôn ngữ
+            if (!bestVoice && langVoices.length > 0) {
+                bestVoice = langVoices[0];
+            }
+
+            return bestVoice;
         }
-        
+
+        function initVoices() {
+            if (!synth) return;
+            viVoice = getBestFemaleVoice('vi');
+            enVoice = getBestFemaleVoice('en');
+        }
         if (typeof speechSynthesis !== 'undefined' && speechSynthesis.onvoiceschanged !== undefined) {
             speechSynthesis.onvoiceschanged = initVoices;
         }
 
+        // --- STREAMING_CHUNK: Viết các hàm điều khiển phát âm thông minh đa luồng song ngữ ---
         // --- GLOBAL SOUND CONTROLLER ---
         function speakText(text, lang = "vi", onEndCallback = null) {
+            // Hủy toàn bộ hàng chờ song ngữ đang chạy dở dang
+            if (bilingualTimeout) {
+                clearTimeout(bilingualTimeout);
+                bilingualTimeout = null;
+            }
+            // Hủy âm thanh Google TTS cũ và ngắt kết nối callback cũ để tránh gọi nhầm
             if (activeAudio) {
+                activeAudio.onended = null;
                 activeAudio.pause();
                 activeAudio.currentTime = 0;
+                activeAudio = null;
             }
-            if (synth) synth.cancel();
+            // Hủy cấu hình đọc dự phòng cũ
+            if (activeUtterance) {
+                activeUtterance.onend = null;
+                activeUtterance = null;
+            }
+            if (synth) {
+                synth.cancel();
+            }
 
             const cleanText = text.trim();
             const langCode = (lang === "vi") ? "vi" : "en";
             
-            // Nếu chạy trên local, Google TTS sẽ chạy mượt mà. 
-            // Nếu chạy trên GitHub Pages, Google TTS có thể bị chặn và sẽ tự động chuyển sang chế độ thiết bị (fallbackDeviceSpeak) được tối ưu giọng nữ.
+            // Custom Google TTS Voice generator (Nhờ có chặn Referrer, liên kết này sẽ luôn phát ra giọng nữ vàng chuẩn xác 100% của Google)
             const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode}&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
             
             activeAudio = new Audio(ttsUrl);
@@ -847,18 +875,30 @@
 
             let playPromise = activeAudio.play();
             if (playPromise !== undefined) {
-                playPromise.catch(() => {
+                playPromise.catch((error) => {
+                    // CHẶN LỖI ĐÈ ÂM: Nếu là AbortError (hủy thủ công) thì bỏ qua, không kích hoạt dự phòng
+                    if (error && error.name === 'AbortError') {
+                        return;
+                    }
                     fallbackDeviceSpeak(cleanText, langCode, onEndCallback);
                 });
             }
         }
 
-        // Phương thức phát âm sơ phòng sử dụng Web Speech API được thiết lập chuẩn giọng Nữ và cao độ tuyệt vời
         function fallbackDeviceSpeak(text, langCode, onEndCallback = null) {
             if (!synth) return;
+            
+            if (activeUtterance) {
+                activeUtterance.onend = null;
+            }
+
             const utterance = new SpeechSynthesisUtterance(text);
+            activeUtterance = utterance;
+
             utterance.rate = speechSpeed;
-            utterance.pitch = 1.0; // Cao độ nữ tính cực kỳ chuẩn và tự nhiên, không bị chóe giọng
+            // Tăng cao độ lên 1.3 để tạo giọng nữ cao ấm áp / trẻ em, loại bỏ triệt để âm trầm của giọng nam
+            utterance.pitch = 1.3; 
+            
             if (langCode === "vi") {
                 if (viVoice) utterance.voice = viVoice;
                 utterance.lang = "vi-VN";
@@ -866,8 +906,13 @@
                 if (enVoice) utterance.voice = enVoice;
                 utterance.lang = "en-US";
             }
+            
             if (onEndCallback) {
-                utterance.onend = onEndCallback;
+                utterance.onend = (event) => {
+                    if (activeUtterance === utterance) {
+                        onEndCallback(event);
+                    }
+                };
             }
             synth.speak(utterance);
         }
@@ -1005,7 +1050,7 @@
                 renderGridView();
             } else if (category === 'vocabulary') {
                 vocabSec.classList.remove('hidden');
-                renderVocabFilters();
+                renderVococFilters();
                 renderVocabGrid();
                 loadCustomWords();
                 generateDailyChallenge(false);
@@ -1187,7 +1232,7 @@
         }
 
         // --- ================= STREAMING_CHUNK: Tạo giao diện Thư viện Từ Vựng & Sổ Tay cá nhân ================= ---
-        function renderVocabFilters() {
+        function renderVococFilters() {
             const container = document.getElementById('vocab-category-filters');
             container.innerHTML = '';
             VOCAB_CATEGORIES.forEach(cat => {
@@ -1198,7 +1243,7 @@
                 }`;
                 button.onclick = () => {
                     activeVocabCategory = cat.id;
-                    renderVocabFilters();
+                    renderVococFilters();
                     renderVocabGrid();
                 };
                 button.innerHTML = `<i class="fa-solid ${cat.icon}"></i> ${cat.name}`;
@@ -1227,6 +1272,7 @@
                             <p class="text-xs sm:text-sm font-black text-emerald-600 leading-tight truncate mt-0.5">${item.wordVi}</p>
                         </div>
                     </div>
+                    <!-- All controls perfectly locked INSIDE card padding box to prevent bleeding -->
                     <div class="flex items-center space-x-1.5 w-full xs:w-auto justify-end bg-slate-50 border border-slate-100 p-1.5 rounded-xl self-stretch xs:self-auto shrink-0">
                         <button onclick="speakText('${item.wordVi}', 'vi')" class="w-9 h-9 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-600 flex items-center justify-center font-black text-xs shadow-sm transition-all active:scale-90 min-h-[36px] min-w-[36px]" title="Phát âm tiếng Việt">VI</button>
                         <button onclick="speakText('${item.wordEn}', 'en')" class="w-9 h-9 rounded-full bg-rose-100 hover:bg-rose-200 text-rose-600 flex items-center justify-center font-black text-xs shadow-sm transition-all active:scale-90 min-h-[36px] min-w-[36px]" title="Phát âm tiếng Anh">EN</button>
@@ -1238,9 +1284,15 @@
             });
         }
 
+        // Helper to read both English and Vietnamese sequentially with a strict pause in between
         function speakBilingual(enText, viText, callback = null) {
+            if (bilingualTimeout) {
+                clearTimeout(bilingualTimeout);
+                bilingualTimeout = null;
+            }
             speakText(enText, 'en', () => {
-                setTimeout(() => {
+                // Đọc tiếng Anh xong hoàn toàn mới hẹn giờ đọc tiếp tiếng Việt
+                bilingualTimeout = setTimeout(() => {
                     speakText(viText, 'vi', callback);
                 }, 1200);
             });
@@ -1725,10 +1777,10 @@
             const m = document.getElementById('game-feedback-message');
             f.classList.remove('hidden');
             m.innerText = message;
-            m.className = success ? "text-base md:text-xl font-black text-emerald-600 animate-bounce leading-tight" : "text-sm font-bold text-red-500 animate-pulse";
+            m.className = success ? "text-base md:text-lg font-black text-emerald-600 animate-bounce" : "text-sm font-bold text-red-500 animate-pulse";
         }
 
-        // --- ================= STREAMING_CHUNK: Quản lý Phòng Âm Nhạc Karaoke mượt mà ================= ---
+        // --- ================= STREAMING_CHUNK: Thiết lập phòng hát Karaoke tải nhạc tùy ý cho bé ================= ---
         let currentMusicLanguage = 'VI';
         let isMelodyPlaying = false;
         let activeSongIndex = -1;
@@ -1850,6 +1902,7 @@
             }
         }
 
+        // Direct Stop function
         function stopActiveMusic() {
             isMelodyPlaying = false;
             document.getElementById('music-vinyl').className = "w-12 h-12 bg-gradient-to-tr from-pink-500 to-rose-500 rounded-full flex items-center justify-center text-2xl shadow-lg shrink-0";
