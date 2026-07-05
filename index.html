@@ -799,32 +799,30 @@
 
         // --- STREAMING_CHUNK: Viết các hàm điều khiển phát âm thông minh đa luồng song ngữ ---
         // --- GLOBAL SOUND CONTROLLER ---
-        function speakText(text, lang = "vi", onEndCallback = null) {
-            if (activeAudio) {
-                activeAudio.pause();
-                activeAudio.currentTime = 0;
-            }
-            if (synth) synth.cancel();
-
-            const cleanText = text.trim();
-            const langCode = (lang === "vi") ? "vi" : "en";
+        function fallbackDeviceSpeak(text, langCode, onEndCallback) {
+            const synth = window.speechSynthesis;
+            const utterance = new SpeechSynthesisUtterance(text);
             
-            // Custom Google TTS Voice generator
-            const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode}&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
+            // Thiết lập ngôn ngữ
+            utterance.lang = (langCode === "vi") ? "vi-VN" : "en-US";
+
+            // Tự động tìm giọng đọc nữ (Female) trong hệ thống
+            const voices = synth.getVoices();
+            const femaleVoice = voices.find(voice =>
+                voice.lang.includes(langCode) &&
+                (voice.name.toLowerCase().includes("female") ||
+                 voice.name.toLowerCase().includes("google") || 
+                 voice.name.toLowerCase().includes("samantha") ||
+                 voice.name.toLowerCase().includes("vietnamese"))
+            );
+            if (femaleVoice) {
+                utterance.voice = femaleVoice;
+            }
             
-            activeAudio = new Audio(ttsUrl);
-            activeAudio.playbackRate = speechSpeed;
-
-            if (onEndCallback) {
-                activeAudio.onended = onEndCallback;
+           if (onEndCallback) {
+               utterance.onend = onEndCallback;
             }
-
-            let playPromise = activeAudio.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(() => {
-                    fallbackDeviceSpeak(cleanText, langCode, onEndCallback);
-                });
-            }
+            synth.speak(utterance);
         }
 
         function fallbackDeviceSpeak(text, langCode, onEndCallback = null) {
