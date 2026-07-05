@@ -256,7 +256,7 @@
             </div>
         </section>
 
-        <!-- ================= STREAMING_CHUNK: Thiết lập giao diện Flashcards Học Thẻ với Emoji siêu to phóng đại ================= -->
+        <!-- ================= STREAMING_CHUNK: Thiết kế giao diện Flashcards Học Thẻ với Emoji siêu to phóng đại ================= -->
         <!-- ================= SECTION 5: FLASHCARD STUDY ARENA ================= -->
         <section id="section-flashcard" class="hidden space-y-5">
             <div class="bg-indigo-100 text-indigo-900 border-2 border-indigo-200 rounded-2xl p-4 flex items-center space-x-3 shadow-sm">
@@ -377,7 +377,7 @@
 
                 <!-- 3.2. Spelling Game Area -->
                 <div id="game-spelling-area" class="hidden w-full flex flex-col items-center justify-center space-y-4 py-2">
-                    <p class="text-center text-[10px] md:text-xs text-slate-500 font-bold leading-tight">Bấm các chữ cái xáo trộn bên dưới theo đúng thứ tự gợi ý nhé!</p>
+                    <p class="text-center text-[10px] md:text-xs text-slate-500 font-bold leading-tight">Bấm các chữ cái xáo trộn bên dưới theo đúng thứ tự của hình ảnh gợi ý nhé!</p>
                     
                     <!-- Display Question details -->
                     <div class="flex flex-col items-center justify-center space-y-1">
@@ -573,7 +573,7 @@
         <p class="mt-2 text-slate-500">© 2026 Bé Học Thông Minh. All rights reserved.</p>
     </footer>
 
-    <!-- App Logic Script -->
+    <!-- ================= STREAMING_CHUNK: Thiết lập dữ liệu và logic vận hành học tập trực quan ================= -->
     <script>
         // --- DATASET DEFINITIONS ---
         // Alphabet Vietnamese Dataset with standard Pedagogical phonetic spelling
@@ -780,57 +780,85 @@
             { id: 'shapes', name: 'Hình khối', icon: 'fa-shapes', bg: 'bg-purple-100 text-purple-700' }
         ];
 
-        // --- AUDIO STATE & TTS CONFIG ---
+        // --- ================= STREAMING_CHUNK: Thiết lập cấu hình giọng đọc Nữ và TTS thông minh chống lỗi GitHub ================= ---
         const synth = window.speechSynthesis;
         let viVoice = null;
         let enVoice = null;
-        let speechSpeed = 0.8; // Set default speed slightly slower (0.8) for optimal child learning & imitation
+        let speechSpeed = 0.8; // Tốc độ phát âm chuẩn cho trẻ nhỏ dễ lặp lại
         let activeAudio = null;
 
+        // Bộ lọc tìm giọng Nữ (Female) tối ưu nhất của thiết bị
         function initVoices() {
             if (!synth) return;
             const voices = synth.getVoices();
-            viVoice = voices.find(v => v.lang.includes('vi-VN') || v.lang.includes('vi_VN')) || voices.find(v => v.lang.startsWith('vi'));
-            enVoice = voices.find(v => v.lang.includes('en-US') || v.lang.includes('en_US')) || voices.find(v => v.lang.startsWith('en'));
+            
+            // Tìm kiếm giọng Nữ Tiếng Việt (Ưu tiên giọng Linh, Lan, An, Google vi-VN, hoặc các giọng chứa "female", "nữ")
+            const viFemaleFilters = [
+                v => v.lang.toLowerCase().replace('_', '-').includes('vi-vn') && (v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('linh') || v.name.toLowerCase().includes('lan') || v.name.toLowerCase().includes('an') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('nữ')),
+                v => v.lang.toLowerCase().startsWith('vi') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('nữ') || v.name.toLowerCase().includes('linh') || v.name.toLowerCase().includes('an') || v.name.toLowerCase().includes('lan')),
+                v => v.lang.toLowerCase().startsWith('vi') && !v.name.toLowerCase().includes('male'),
+                v => v.lang.toLowerCase().startsWith('vi')
+            ];
+
+            for (let filter of viFemaleFilters) {
+                viVoice = voices.find(filter);
+                if (viVoice) break;
+            }
+
+            // Tìm kiếm giọng Nữ Tiếng Anh (Ưu tiên Google US English, Zira, Samantha, Susan, Hazel, Elsa)
+            const enFemaleFilters = [
+                v => (v.lang.toLowerCase().replace('_', '-').includes('en-us') || v.lang.toLowerCase().replace('_', '-').includes('en-gb')) && (v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('samantha') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('susan') || v.name.toLowerCase().includes('hazel') || v.name.toLowerCase().includes('elsa')),
+                v => v.lang.toLowerCase().startsWith('en') && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('samantha') || v.name.toLowerCase().includes('susan') || v.name.toLowerCase().includes('hazel')),
+                v => v.lang.toLowerCase().startsWith('en') && !v.name.toLowerCase().includes('male'),
+                v => v.lang.toLowerCase().startsWith('en')
+            ];
+
+            for (let filter of enFemaleFilters) {
+                enVoice = voices.find(filter);
+                if (enVoice) break;
+            }
         }
+        
         if (typeof speechSynthesis !== 'undefined' && speechSynthesis.onvoiceschanged !== undefined) {
             speechSynthesis.onvoiceschanged = initVoices;
         }
 
-        // --- STREAMING_CHUNK: Viết các hàm điều khiển phát âm thông minh đa luồng song ngữ ---
         // --- GLOBAL SOUND CONTROLLER ---
-        window.speechSynthesis.onvoiceschanged = () => { console.log("Voice list ready"); };
-        function fallbackDeviceSpeak(text, langCode, onEndCallback) {
-            const synth = window.speechSynthesis;
-            const utterance = new SpeechSynthesisUtterance(text);
-            
-            // Thiết lập ngôn ngữ
-            utterance.lang = (langCode === "vi") ? "vi-VN" : "en-US";
+        function speakText(text, lang = "vi", onEndCallback = null) {
+            if (activeAudio) {
+                activeAudio.pause();
+                activeAudio.currentTime = 0;
+            }
+            if (synth) synth.cancel();
 
-            // Tự động tìm giọng đọc nữ (Female) trong hệ thống
-            const voices = synth.getVoices();
-            const femaleVoice = voices.find(voice =>
-                voice.lang.includes(langCode) &&
-                (voice.name.toLowerCase().includes("female") ||
-                 voice.name.toLowerCase().includes("google") || 
-                 voice.name.toLowerCase().includes("samantha") ||
-                 voice.name.toLowerCase().includes("vietnamese"))
-            );
-            if (femaleVoice) {
-                utterance.voice = femaleVoice;
-            }
+            const cleanText = text.trim();
+            const langCode = (lang === "vi") ? "vi" : "en";
             
-           if (onEndCallback) {
-               utterance.onend = onEndCallback;
+            // Nếu chạy trên local, Google TTS sẽ chạy mượt mà. 
+            // Nếu chạy trên GitHub Pages, Google TTS có thể bị chặn và sẽ tự động chuyển sang chế độ thiết bị (fallbackDeviceSpeak) được tối ưu giọng nữ.
+            const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode}&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
+            
+            activeAudio = new Audio(ttsUrl);
+            activeAudio.playbackRate = speechSpeed;
+
+            if (onEndCallback) {
+                activeAudio.onended = onEndCallback;
             }
-            synth.speak(utterance);
+
+            let playPromise = activeAudio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(() => {
+                    fallbackDeviceSpeak(cleanText, langCode, onEndCallback);
+                });
+            }
         }
 
+        // Phương thức phát âm sơ phòng sử dụng Web Speech API được thiết lập chuẩn giọng Nữ và cao độ tuyệt vời
         function fallbackDeviceSpeak(text, langCode, onEndCallback = null) {
             if (!synth) return;
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.rate = speechSpeed;
-            utterance.pitch = 1.15;
+            utterance.pitch = 1.0; // Cao độ nữ tính cực kỳ chuẩn và tự nhiên, không bị chóe giọng
             if (langCode === "vi") {
                 if (viVoice) utterance.voice = viVoice;
                 utterance.lang = "vi-VN";
@@ -875,11 +903,10 @@
         }
 
         function testSpeechSystem() {
-            speakText("Hệ thống âm thanh đã đồng bộ và sẵn sàng!", "vi");
+            speakText("Hệ thống loa học tập giọng nữ chuẩn đã sẵn sàng!", "vi");
         }
 
-        // --- STREAMING_CHUNK: Viết các hàm điều hướng Tab và trượt thanh cuộn ngang bằng nút bấm ---
-        // --- NAVIGATION STATE & SYSTEM CONTROL ---
+        // --- ================= STREAMING_CHUNK: Thiết lập trạng thái điều hướng Tab mượt mà ================= ---
         let currentCategory = 'alphabet'; // 'alphabet', 'numbers', 'vocabulary', 'braingames', 'musicroom'
         let currentLanguageSet = 'VI';   // 'VI' or 'EN'
         let activeVocabCategory = 'all';
@@ -897,7 +924,6 @@
         let flashcardDelay = 4; // seconds
         let flashcardTimer = null;
 
-        // Custom function to slide tab bar directly from buttons (Requested fix for image_527f2b.png)
         function scrollTabs(direction) {
             const scroller = document.getElementById('tab-scroller');
             if (!scroller) return;
@@ -908,7 +934,6 @@
             }
         }
 
-        // Custom toggle function to hide header and expand mobile space (Requested changes for image_52864d.png)
         function toggleHeader() {
             const header = document.getElementById('global-header');
             const toggleIcon = document.getElementById('header-toggle-icon');
@@ -934,7 +959,6 @@
             currentCategory = category;
             stopActiveMusic();
             
-            // Reset main tab button colors
             const tabs = ['alphabet', 'numbers', 'vocabulary', 'flashcard', 'braingames', 'musicroom'];
             tabs.forEach(t => {
                 const btn = document.getElementById(`tab-${t}`);
@@ -946,7 +970,6 @@
                 }
             });
 
-            // Adjust sub tab layouts
             const subBar = document.getElementById('global-sub-bar');
             const alphabetSub = document.getElementById('sub-lang-selector');
             const gridSec = document.getElementById('section-grid');
@@ -955,14 +978,13 @@
             const gamesSec = document.getElementById('section-braingames');
             const musicSec = document.getElementById('section-musicroom');
 
-            // Hide/Show Autoplay button depending on page context
             const btnAutoplay = document.getElementById('btn-autoplay');
             if (category === 'alphabet' || category === 'numbers') {
                 btnAutoplay.classList.remove('hidden');
-                subBar.classList.remove('hidden'); // Show for Alphabet & Numbers
+                subBar.classList.remove('hidden');
             } else {
                 btnAutoplay.classList.add('hidden');
-                subBar.classList.add('hidden'); // HIDE global subbar (image_521210.png) for Vocab, Flashcards, Games, Music
+                subBar.classList.add('hidden');
             }
 
             gridSec.classList.add('hidden');
@@ -1014,8 +1036,7 @@
             renderGridView();
         }
 
-        // --- STREAMING_CHUNK: Viết các hàm cho cơ chế Đọc xuyên suốt bảng từ cái/con số ---
-        // --- AUTOPLAY CONTINUOUS READING ENGINE ---
+        // --- ================= STREAMING_CHUNK: Xây dựng cơ chế Đọc xuyên suốt bảng chữ cái/chữ số ================= ---
         function toggleAutoplay() {
             if (isAutoplayActive) {
                 stopAutoplay();
@@ -1040,7 +1061,6 @@
                 btn.innerHTML = `<i class="fa-solid fa-play text-xs"></i> Đọc Xuyên Suốt`;
                 btn.className = "flex-1 sm:flex-initial bg-indigo-500 hover:bg-indigo-600 text-white font-black px-4 py-2.5 rounded-full text-xs flex items-center justify-center gap-1.5 shadow transition-all transform active:scale-95 uppercase tracking-wider min-h-[44px]";
             }
-            // Remove highlighters
             const cards = document.querySelectorAll('#grid-container > div');
             cards.forEach(c => {
                 c.classList.remove('ring-4', 'ring-pink-500', 'scale-105', 'bg-pink-50');
@@ -1056,12 +1076,9 @@
                 return;
             }
 
-            // Highlight active card
             highlightAutoplayCard(autoplayIndex);
-
             const item = data[autoplayIndex];
             
-            // Standard reading speed for normal letter pronunciation
             let textToSpeak = (currentCategory === 'numbers') ? (currentLanguageSet === 'VI' ? item.wordVi : item.wordEn) : (item.spellVi || item.letter);
             speakText(textToSpeak, currentLanguageSet === 'VI' ? 'vi' : 'en', () => {
                 goToNextAutoplay();
@@ -1071,7 +1088,7 @@
         function goToNextAutoplay() {
             if (!isAutoplayActive) return;
             autoplayIndex++;
-            setTimeout(playNextAutoplay, 1800); // 1.8 seconds delay between letters for perfect imitation
+            setTimeout(playNextAutoplay, 1800);
         }
 
         function highlightAutoplayCard(index) {
@@ -1086,14 +1103,12 @@
             });
         }
 
-        // --- STREAMING_CHUNK: Sinh các lưới ô chữ cái, số, từ vựng chuẩn CSS Grid di động ---
-        // --- 1. ALPHABET & NUMBERS GRID RENDER ---
+        // --- ================= STREAMING_CHUNK: Tạo lưới hiển thị thẻ Chữ cái, Chữ số mượt mà ================= ---
         function getActiveDataset() {
             if (currentCategory === 'numbers') return NUMBERS;
             return (currentLanguageSet === 'VI') ? VI_ALPHABET : EN_ALPHABET;
         }
 
-        // Helper to output styled color circles or default emojis
         function getEmojiOrColorHtml(item, sizeClass = 'text-5xl') {
             if (item.category === 'colors') {
                 let colorHex = '#ef4444';
@@ -1102,7 +1117,7 @@
                 else if (item.wordEn === 'Green') colorHex = '#22c55e';
                 else if (item.wordEn === 'Yellow') colorHex = '#eab308';
                 else if (item.wordEn === 'Purple') colorHex = '#a855f7';
-                else if (item.wordEn === 'Pink') colorHex = '#ec4899'; // Gorgeous hot pink circle
+                else if (item.wordEn === 'Pink') colorHex = '#ec4899';
                 else if (item.wordEn === 'Orange') colorHex = '#f97316';
                 else if (item.wordEn === 'Brown') colorHex = '#78350f';
                 else if (item.wordEn === 'Black') colorHex = '#000000';
@@ -1131,7 +1146,6 @@
                 const card = document.createElement('div');
                 card.className = `relative flex flex-col justify-between items-center p-2.5 bg-white border-2 border-slate-200 border-r-4 border-b-4 rounded-2xl aspect-square cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-95 shadow-sm select-none ${item.border || 'border-indigo-400 text-indigo-500'}`;
                 
-                // Clicking card center reads with normal phonetic speed
                 card.onclick = () => {
                     stopAutoplay();
                     if (currentCategory === 'numbers') {
@@ -1141,7 +1155,6 @@
                     }
                 };
 
-                // Click tracer practice loader
                 const practiceBtn = document.createElement('button');
                 practiceBtn.className = "absolute bottom-1 right-1 text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-500 font-extrabold px-1.5 py-1 rounded-lg flex items-center justify-center gap-0.5 z-20 min-h-[24px]";
                 practiceBtn.innerHTML = `<i class="fa-solid fa-pen"></i> Viết`;
@@ -1150,7 +1163,6 @@
                     openWritingPad(item.letter);
                 };
 
-                // Independent small round speaker for example word only
                 const soundBtn = document.createElement('button');
                 soundBtn.className = "absolute top-1 right-1 w-7 h-7 rounded-full bg-orange-500 hover:bg-orange-600 text-white flex items-center justify-center transition-transform active:scale-90 z-20 shadow-sm min-h-[28px] min-w-[28px]";
                 soundBtn.innerHTML = `<i class="fa-solid fa-volume-high text-[9px]"></i>`;
@@ -1174,8 +1186,7 @@
             });
         }
 
-        // --- STREAMING_CHUNK: Sinh giao diện cho Từ Vựng phong phú ---
-        // --- 2. VOCABULARY ENGINE ---
+        // --- ================= STREAMING_CHUNK: Tạo giao diện Thư viện Từ Vựng & Sổ Tay cá nhân ================= ---
         function renderVocabFilters() {
             const container = document.getElementById('vocab-category-filters');
             container.innerHTML = '';
@@ -1195,7 +1206,6 @@
             });
         }
 
-        // Beautifully padded vocabulary cards contained within limits (Addresses image_0c917e.png layout leaks)
         function renderVocabGrid(searchData = null) {
             const grid = document.getElementById('vocab-items-grid');
             grid.innerHTML = '';
@@ -1217,7 +1227,6 @@
                             <p class="text-xs sm:text-sm font-black text-emerald-600 leading-tight truncate mt-0.5">${item.wordVi}</p>
                         </div>
                     </div>
-                    <!-- All controls perfectly locked INSIDE card padding box to prevent bleeding -->
                     <div class="flex items-center space-x-1.5 w-full xs:w-auto justify-end bg-slate-50 border border-slate-100 p-1.5 rounded-xl self-stretch xs:self-auto shrink-0">
                         <button onclick="speakText('${item.wordVi}', 'vi')" class="w-9 h-9 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-600 flex items-center justify-center font-black text-xs shadow-sm transition-all active:scale-90 min-h-[36px] min-w-[36px]" title="Phát âm tiếng Việt">VI</button>
                         <button onclick="speakText('${item.wordEn}', 'en')" class="w-9 h-9 rounded-full bg-rose-100 hover:bg-rose-200 text-rose-600 flex items-center justify-center font-black text-xs shadow-sm transition-all active:scale-90 min-h-[36px] min-w-[36px]" title="Phát âm tiếng Anh">EN</button>
@@ -1229,10 +1238,8 @@
             });
         }
 
-        // Helper to read both English and Vietnamese sequentially with a strict pause in between
         function speakBilingual(enText, viText, callback = null) {
             speakText(enText, 'en', () => {
-                // Strict pause after English finishes before speaking Vietnamese (Requested changes)
                 setTimeout(() => {
                     speakText(viText, 'vi', callback);
                 }, 1200);
@@ -1276,7 +1283,6 @@
             if (forceRefresh) showToast("Đã chọn 3 từ mới hôm nay!");
         }
 
-        // SỔ TAY TỰ THÊM
         function loadCustomWords() {
             const saved = localStorage.getItem('custom_baby_notebook_v2');
             customWords = saved ? JSON.parse(saved) : [];
@@ -1332,8 +1338,7 @@
             showToast("Đã xóa khỏi sổ tay từ vựng!");
         }
 
-        // --- STREAMING_CHUNK: Viết các hàm vận hành trò chơi lật thẻ nhớ & game xếp chữ cái ---
-        // --- 3. BRAIN DEVELOPMENT GAMES LOGIC ---
+        // --- ================= STREAMING_CHUNK: Lập trình hệ thống Mini-game Trí Não logic bán cầu ================= ---
         let activeGameMode = 'memory'; // 'memory', 'spelling', 'association'
         let gameScore = 0;
         let gameLanguage = 'BI';       // EN, VI, or BI (Bilingual)
@@ -1420,9 +1425,8 @@
             }
         }
 
-        // 3.1. Right Brain: Memory Game Builder
         function initMemoryGame() {
-            const pool = shuffleArray(VOCABULARY_DATA).slice(0, 4); // 4 pairs (8 cards total)
+            const pool = shuffleArray(VOCABULARY_DATA).slice(0, 4);
             const doublePool = [];
             pool.forEach(item => {
                 doublePool.push({ ...item, pairId: item.id, uniqueId: crypto.randomUUID(), type: 'emoji' });
@@ -1522,7 +1526,7 @@
             }
         }
 
-        // 3.2. Left Brain: Spelling Game Builder
+        // --- ================= STREAMING_CHUNK: Quản lý Game Ghép Chữ & Âm Thanh Trực Quan ================= ---
         function initSpellingGame() {
             spellCurrentItem = shuffleArray(VOCABULARY_DATA)[0];
             spellUserAnswer = [];
@@ -1630,7 +1634,6 @@
             }
         }
 
-        // 3.3. Sound Association Game Builder with Delayed Complete Feedback Speak
         function initAssociationGame() {
             assocCurrentItem = shuffleArray(VOCABULARY_DATA)[0];
             const pool = VOCABULARY_DATA.filter(item => item.id !== assocCurrentItem.id);
@@ -1649,7 +1652,7 @@
                     if (gameTransitionLock) return;
 
                     if (opt.id === assocCurrentItem.id) {
-                        gameTransitionLock = true; // Lock interactions instantly
+                        gameTransitionLock = true;
                         gameScore += 10;
                         document.getElementById('brain-score').innerText = gameScore;
                         confetti({ particleCount: 50, spread: 60 });
@@ -1671,7 +1674,6 @@
                                 }, 2500);
                             });
                         } else {
-                            // Bilingual Mode - Speaks English first, then Vietnamese sequentially before unlocking
                             showGameFeedback(true, `🌟 Xuất sắc! ${opt.wordEn} - ${opt.wordVi}`);
                             speakBilingual(`Correct! This is ${opt.wordEn}`, `Chính xác! Đây là ${opt.wordVi}`, () => {
                                 setTimeout(() => {
@@ -1726,8 +1728,7 @@
             m.className = success ? "text-base md:text-xl font-black text-emerald-600 animate-bounce leading-tight" : "text-sm font-bold text-red-500 animate-pulse";
         }
 
-        // --- STREAMING_CHUNK: Viết các hàm vận hành phòng âm nhạc, điều phối âm lượng karaoke ---
-        // --- 4. EDUCATIONAL MUSIC ROOM SYSTEM ---
+        // --- ================= STREAMING_CHUNK: Quản lý Phòng Âm Nhạc Karaoke mượt mà ================= ---
         let currentMusicLanguage = 'VI';
         let isMelodyPlaying = false;
         let activeSongIndex = -1;
@@ -1756,7 +1757,7 @@
                 btnNormal.className = "flex-1 xs:flex-none px-3 py-1.5 rounded-md text-[10px] md:text-xs font-black text-slate-300 hover:text-white transition-all";
                 showToast("Chế độ Karaoke: Chỉ giữ đệm nhịp nền");
                 if (customAudioElement) {
-                    customAudioElement.volume = 0.4; // lower main track sound for kids voice overlaying
+                    customAudioElement.volume = 0.4;
                 }
             }
         }
@@ -1787,7 +1788,6 @@
                 btn.onclick = () => {
                     activeSongIndex = idx;
                     renderNurseryPlaylist();
-                    // Instantly switches the track, stops previous and starts new (Improved requested function)
                     playSelectedSong();
                 };
                 btn.innerHTML = `
@@ -1808,9 +1808,7 @@
             document.getElementById('karaoke-text-line-2').innerText = "Hát Karaoke cùng ba mẹ thôi nào! 🎤";
         }
 
-        // Play selected uploaded custom song instantly stopping previous playing song
         function playSelectedSong() {
-            // Instant stop before triggering next song
             stopActiveMusic();
             
             const songs = getActivePlaylist();
@@ -1830,7 +1828,6 @@
             };
         }
 
-        // Direct Pause functionality (Requested feature)
         function pauseActiveMusic() {
             if (customAudioElement && isMelodyPlaying) {
                 customAudioElement.pause();
@@ -1841,7 +1838,6 @@
             }
         }
 
-        // Direct Resume functionality (Requested feature)
         function resumeActiveMusic() {
             if (customAudioElement && !isMelodyPlaying) {
                 customAudioElement.play();
@@ -1854,7 +1850,6 @@
             }
         }
 
-        // Direct Turn-off Stop functionality (Requested feature)
         function stopActiveMusic() {
             isMelodyPlaying = false;
             document.getElementById('music-vinyl').className = "w-12 h-12 bg-gradient-to-tr from-pink-500 to-rose-500 rounded-full flex items-center justify-center text-2xl shadow-lg shrink-0";
@@ -1884,11 +1879,10 @@
             
             activeSongIndex = customSongsList.length - 1;
             renderNurseryPlaylist();
-            playSelectedSong(); // Instantly switch and start playing!
+            playSelectedSong();
         }
 
-        // --- STREAMING_CHUNK: Thiết lập các thuật toán vẽ ngón tay lên Canvas, định dạng tỷ lệ tự động ---
-        // --- 5. INTERACTIVE CANVAS WRITING PAD ---
+        // --- ================= STREAMING_CHUNK: Quản lý Bảng vẽ viết chữ Canvas mượt mà, định lượng tọa độ ================= ---
         let canvas = null;
         let ctx = null;
         let isDrawing = false;
@@ -1930,7 +1924,6 @@
             const len = text.length || 1;
             const container = document.getElementById('canvas-container');
             
-            // Single character/number -> square box. Words -> Landscape box.
             if (len <= 2) {
                 container.style.aspectRatio = '1 / 1';
                 container.style.maxWidth = '300px';
@@ -1941,7 +1934,6 @@
                 container.style.margin = '0';
             }
 
-            // Let layout render and sync coordinate space
             setTimeout(() => {
                 const rect = container.getBoundingClientRect();
                 canvas.width = rect.width;
@@ -1955,16 +1947,14 @@
             ctx = canvas.getContext('2d');
             adjustCanvasAspectRatio();
 
-            // Set listeners
             canvas.addEventListener('mousedown', startWriting);
             canvas.addEventListener('mousemove', drawWriting);
             canvas.addEventListener('mouseup', stopWriting);
             canvas.addEventListener('mouseleave', stopWriting);
 
-            // Touch events specifically preventing scrolling on mobile (Essential optimization)
             canvas.addEventListener('touchstart', (e) => {
                 if (e.target === canvas) {
-                    e.preventDefault(); // Prevent swipe-to-refresh & screen drag
+                    e.preventDefault();
                 }
                 const touch = e.touches[0];
                 const mouseEvent = new MouseEvent("mousedown", {
@@ -1976,7 +1966,7 @@
 
             canvas.addEventListener('touchmove', (e) => {
                 if (e.target === canvas) {
-                    e.preventDefault(); // Stop standard screen scroll while drawing
+                    e.preventDefault();
                 }
                 const touch = e.touches[0];
                 const mouseEvent = new MouseEvent("mousemove", {
@@ -2002,16 +1992,14 @@
             const text = document.getElementById('writing-target-input').value.toUpperCase().trim();
             if (!text) return;
 
-            // Draw Montessori dotted tracer guideline text
             ctx.save();
-            // Scale font dynamically based on word length to fit canvas beautifully
             const calculatedFontSize = Math.min(canvas.height * 0.7, (canvas.width / text.length) * 1.3);
             ctx.font = `bold ${calculatedFontSize}px 'Fredoka'`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.strokeStyle = '#cbd5e1'; 
             ctx.lineWidth = 3;
-            ctx.setLineDash([6, 10]); // Pretty dotted line!
+            ctx.setLineDash([6, 10]);
             ctx.strokeText(text, canvas.width / 2, canvas.height / 2 + 5);
             ctx.restore();
         }
@@ -2021,7 +2009,7 @@
             const rect = canvas.getBoundingClientRect();
             ctx.beginPath();
             ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-            ctx.lineWidth = 4; // Slim elegant marker size
+            ctx.lineWidth = 4;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
         }
@@ -2071,8 +2059,7 @@
             }
         }
 
-        // --- STREAMING_CHUNK: Vận hành cơ chế Học Thẻ Flashcards, đọc tiếng Anh trước -> dừng -> đọc tiếng Việt -> chờ lật thẻ ---
-        // ================= FLASHCARD SYSTEM INTEGRATION LOGIC =================
+        // --- ================= STREAMING_CHUNK: Quản lý học tập Flashcard chuẩn phản xạ đa ngôn ngữ ================= ---
         function startFlashcardSystem() {
             flashcardsQueue = shuffleArray(VOCABULARY_DATA);
             flashcardIndex = 0;
@@ -2085,7 +2072,6 @@
 
             const item = flashcardsQueue[flashcardIndex];
 
-            // Render highly readable, large responsive flashcard layout with super-sized emoji (Requested changes)
             container.innerHTML = `
                 <div class="flex flex-col items-center justify-center bg-slate-50 border border-slate-100 rounded-3xl p-6 shadow-inner w-full min-h-[260px] gap-6">
                     ${getEmojiOrColorHtml(item, 'text-8xl md:text-9xl')}
@@ -2096,7 +2082,6 @@
                 </div>
             `;
             
-            // Auto-speak current card on transition
             speakActiveFlashcard();
         }
 
@@ -2109,7 +2094,6 @@
             } else if (flashcardMode === 'EN') {
                 speakText(item.wordEn, 'en', callback);
             } else {
-                // Song ngữ - speaks English first, waits until fully finished, then speaks Vietnamese (Requested changes)
                 speakBilingual(item.wordEn, item.wordVi, callback);
             }
         }
@@ -2198,9 +2182,7 @@
             }
             if (!isFlashcardAutoActive) return;
 
-            // Wait for complete bilingual voice sequence to finish completely (Requested changes)
             speakActiveFlashcard(() => {
-                // Start transition countdown ONLY after vocal playback ended completely!
                 flashcardTimer = setTimeout(() => {
                     nextFlashcard();
                 }, flashcardDelay * 1000);
