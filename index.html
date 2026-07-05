@@ -799,6 +799,7 @@
 
         // --- STREAMING_CHUNK: Viết các hàm điều khiển phát âm thông minh đa luồng song ngữ ---
         // --- GLOBAL SOUND CONTROLLER ---
+        window.speechSynthesis.onvoiceschanged = () => { console.log("Voice list ready"); };
         function fallbackDeviceSpeak(text, langCode, onEndCallback) {
             const synth = window.speechSynthesis;
             const utterance = new SpeechSynthesisUtterance(text);
